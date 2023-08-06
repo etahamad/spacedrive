@@ -1,9 +1,10 @@
 use crate::{
 	api::locations::ExplorerItem,
-	library::Library,
+	library::LoadedLibrary,
 	object::{cas::generate_cas_id, preview::get_thumb_key},
 	prisma::location,
 	util::error::FileIOError,
+	Node,
 };
 
 use std::{
@@ -87,7 +88,8 @@ pub struct NonIndexedPathItem {
 pub async fn walk(
 	full_path: impl AsRef<Path>,
 	with_hidden_files: bool,
-	library: Arc<Library>,
+	library: Arc<LoadedLibrary>,
+	node: Arc<Node>,
 ) -> Result<NonIndexedFileSystemEntries, NonIndexedLocationError> {
 	let path = full_path.as_ref();
 	let mut read_dir = fs::read_dir(path).await.map_err(|e| (path, e))?;
@@ -159,15 +161,14 @@ pub async fn walk(
 					let thumbnail_key = get_thumb_key(&cas_id);
 					let entry_path = entry_path.clone();
 					let extension = extension.clone();
-					let inner_library = Arc::clone(&library);
+					let inner_node = Arc::clone(&node);
 					let inner_cas_id = cas_id.clone();
 					tokio::spawn(async move {
-						generate_thumbnail(&extension, &inner_cas_id, entry_path, &inner_library)
+						generate_thumbnail(&extension, &inner_cas_id, entry_path, &inner_node)
 							.await;
 					});
 
-					library
-						.manager
+					node.services
 						.thumbnail_remover
 						.new_non_indexed_thumbnail(cas_id)
 						.await;
